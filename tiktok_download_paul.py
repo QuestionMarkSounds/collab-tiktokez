@@ -14,7 +14,9 @@ context_options = {
 async def trending_videos():
     async with TikTokApi() as api:
         await api.create_sessions(ms_tokens=[ms_token], num_sessions=1, sleep_after=3, context_options=context_options)
-        async for video in api.hashtag(name="trump").videos(count=5):
+        # Use this instead of videos(count)
+        makeshift_counter = 0
+        async for video in api.hashtag(name="roblox").videos(count=1):
             info = video.as_dict
             print("-------------------------------")
             bitrate = info['video']['bitrate']
@@ -24,6 +26,10 @@ async def trending_videos():
                     if response.status_code == 200:
                         with open("tt_vids/{}.mp4".format(video.id), "wb") as f:
                             f.write(response.content)
+
+                        makeshift_counter += 1
+            if makeshift_counter >= 5:
+                break
 
 if __name__ == "__main__":
     asyncio.run(trending_videos())
