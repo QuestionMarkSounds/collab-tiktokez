@@ -13,8 +13,11 @@ async def download_tiktoks(count, topic):
 
         videos_info = []
         counter = 0
-        async for video in api.hashtag(name=topic).videos(): # Count does not work, have to manually tweak 
+        async for video in api.hashtag(name=topic).videos():
             video_dict = video.as_dict
+
+            if video_dict.get('video').get('duration') <= 20: continue
+            if video_dict.get('video').get('duration') > 60: continue
 
             info = {'id': video_dict.get('id'), 'desc': video_dict.get('desc')}
             videos_info.append(info)
