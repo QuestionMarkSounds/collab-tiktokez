@@ -1,27 +1,31 @@
-
-
-
-
-from moviepy.video.tools.subtitles import SubtitlesClip
-
-from moviepy.audio.fx.audio_fadein import audio_fadein
 from moviepy.audio.fx.audio_fadeout import audio_fadeout
-from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, AudioFileClip, CompositeAudioClip
+from moviepy.audio.fx.audio_fadein import audio_fadein
+from moviepy.video.tools.subtitles import SubtitlesClip
+from tiktok_downloader import download_tiktoks
+from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, AudioFileClip, CompositeAudioClip, ImageClip
 from moviepy.config import change_settings
 from datetime import timedelta
 from tt_voice import Voice, tts
+from pilmoji import Pilmoji
+from groq import Groq
+from PIL import ImageFont, Image
 
+import numpy as np
+
+import asyncio
 import whisper
+import random
 import shutil
+import json
 import os
+import re
 
-shutil.rmtree('./temp')
-os.mkdir('./temp')
+
 
 change_settings({"IMAGEMAGICK_BINARY": r"C:\\Program Files\\ImageMagick-7.1.1-Q16-HDRI\\magick.exe"})
 
 # Util for accurate caption file generation
-def format_time(seconds: float) -> str:
+def util_format_time(seconds: float) -> str:
     """Formats time in seconds to SRT format hh:mm:ss,SSS."""
     td = timedelta(seconds=seconds)
     total_seconds = int(td.total_seconds())
@@ -32,18 +36,95 @@ def format_time(seconds: float) -> str:
     return f"{hours:02}:{minutes:02}:{seconds:02},{milliseconds:03}"
 
 
+# This util randomly capitalizes certain words and removes punctuation marks
+def util_enhance_srt(srt_path):
+
+    # emojis = ["\U0001F600", "\U0001F914", "\U0001F975"]  # List of emojis to choose from
+
+    with open(srt_path, "r", encoding="utf-8") as f: lines = f.readlines()
+    
+    # Choose random lines to add emojis
+    enhanced_lines = []
+    for line in lines:
+        if line.strip() and not bool(re.match(r'^\d+', line.strip())): # Only add emojis to non-empty lines that do not start with an integer
+            line = line.replace('.', '').replace(',', '')
+            if random.random() < 0.25: # 25% chance to capitalize a line
+                line = line.upper()
+
+            # if random.random() < 0.25: # 25% chance to add an emoji to a line
+            #     emoji = random.choice(emojis)
+            #     line = f"{emoji} {line.strip()} {emoji}\n"
+
+        enhanced_lines.append(line)
+
+    with open("temp//temp.srt", "w", encoding="utf-8") as f: f.writelines(enhanced_lines)
 
 
 
-def download_video(topic):
-    pass
 
 
 
-def generate_tiktok_without_speech(input_file_path, output_file_path, topic_intro, topic_outro, ai_voice):
+def make_emoji_image(emoji):
+    emoji_font = ImageFont.truetype("data//NotoColorEmoji-Regular.ttf", random.randint(48, 200))
+    text_size = emoji_font.getsize(emoji.strip())
+    image = Image.new("RGBA", text_size, (0, 0, 0, 0))
+    with Pilmoji(image) as pilmoji:
+        pilmoji.text((0, 0), emoji.strip(), (0, 0, 0), emoji_font)
+    return np.array(image)
+
+
+
+def create_random_emoji_clips(video_duration):
+    """
+    Creates a list of ImageClips with emojis that appear at random times and positions.
+    """
+    emojis = ["😊", "😂", "😍", "😎", "😢", "😡"]
+
+    clips = []
+    for _ in range(10):
+        # Create the emoji image
+
+        clip_duration = random.randint(2, 6)/10
+
+        emoji_image = make_emoji_image(random.choice(emojis))
+        
+        # Create an ImageClip from the emoji image
+        emoji_clip = ImageClip(emoji_image, duration=clip_duration)
+        
+        # Random start time within the video duration
+        start_time = random.uniform(0, video_duration - clip_duration)
+        
+        # Random position within the video frame
+        pos_x = random.choice([0.1, 0.8])  # Relative positions from 0.1 to 0.9
+        pos_y = random.uniform(0.75, 0.85)
+        
+        # Set start time and position
+        emoji_clip = emoji_clip.set_start(start_time).set_position((pos_x, pos_y), relative=True)
+        
+        clips.append(emoji_clip)
+    
+    return clips
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def generate_tiktok_without_speech(input_file_path, output_file_path, video_intro, video_outro, ai_voice):
 
     # First step: generate intro audio
-    tts(topic_intro, ai_voice, "temp//temp_intro.mp3")
+    tts(video_intro, ai_voice, "temp//temp_intro.mp3")
 
     # Second step: generate captions from the generated intro audio
     i = 0
@@ -54,8 +135,10 @@ def generate_tiktok_without_speech(input_file_path, output_file_path, topic_intr
 
             i += 1
             text = word["word"]
-            word = f"{i}\n{format_time(word["start"])} --> {format_time(word["end"]) }\n{text[1:] if text[0] == ' ' else text}\n\n"
+            word = f"{i}\n{util_format_time(word["start"])} --> {util_format_time(word["end"]) }\n{text[1:] if text[0] == ' ' else text}\n\n"
             with open("temp//temp.srt", "a", encoding="utf-8") as f: f.write(word)
+
+    util_enhance_srt("temp//temp.srt") # Remove punctuation marks and randomize capitalization
 
     # Third step: add the captions to the video
     method = "caption"
@@ -64,17 +147,17 @@ def generate_tiktok_without_speech(input_file_path, output_file_path, topic_intr
     align = "center"
 
     subtitles_stroke_black = SubtitlesClip("temp//temp.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, stroke_width=12, stroke_color="black"))
-    subtitles_stroke_white = SubtitlesClip("temp//temp.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, stroke_width=3, stroke_color="white"))
     subtitles = SubtitlesClip("temp//temp.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, color="yellow"))
 
     subtitle_height = 0.25 # 25% of the video height
 
+    emoji_clips = create_random_emoji_clips(video_duration=VideoFileClip(input_file_path).duration)
+
     video = CompositeVideoClip([
         VideoFileClip(input_file_path), 
         subtitles_stroke_black.set_position(("center", 1-subtitle_height), relative=True), 
-        subtitles_stroke_white.set_position(("center", 1-subtitle_height), relative=True), 
-        subtitles.set_position(("center", 1-subtitle_height), relative=True)
-        ])
+        subtitles.set_position(("center", 1-subtitle_height), relative=True),
+        ] + emoji_clips)
     
     # Fourth step: combine the intro audio with the tiktok audio
     new_audio = AudioFileClip("temp//temp_intro.mp3")
@@ -83,7 +166,7 @@ def generate_tiktok_without_speech(input_file_path, output_file_path, topic_intr
     video = video.set_audio(combined_audio)
 
     # Fifth step: generate outro audio and srt
-    tts(topic_outro, ai_voice, "temp//temp_outro.mp3")
+    tts(video_outro, ai_voice, "temp//temp_outro.mp3")
 
     new_audio = AudioFileClip("temp//temp_outro.mp3")
     outro_start_time = round(video.duration-new_audio.duration, 2)
@@ -98,21 +181,24 @@ def generate_tiktok_without_speech(input_file_path, output_file_path, topic_intr
             text = word["word"]
             start_time = outro_start_time + word["start"]
             end_time = outro_start_time + word["end"]
-            word = f"{i}\n{format_time(start_time)} --> {format_time(end_time) }\n{text[1:] if text[0] == ' ' else text}\n\n"
+            word = f"{i}\n{util_format_time(start_time)} --> {util_format_time(end_time) }\n{text[1:] if text[0] == ' ' else text}\n\n"
             with open("temp//temp_outro.srt", "a", encoding="utf-8") as f: f.write(word)
 
 
     # Sixth step: add outro subtitles to the video
-    subtitles_stroke_black = SubtitlesClip("temp//temp_outro.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, stroke_width=12, stroke_color="black"))
-    subtitles_stroke_white = SubtitlesClip("temp//temp_outro.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, stroke_width=3, stroke_color="white"))
-    subtitles = SubtitlesClip("temp//temp_outro.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, color="green"))
+    method = "caption"
+    font = "Comic-Sans-MS-Bold"
+    fontsize = 96
+    align = "center"
 
-    subtitle_height = 0.75 # 75% of the video height
+    subtitles_stroke_black = SubtitlesClip("temp//temp_outro.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, stroke_width=12, stroke_color="black"))
+    subtitles = SubtitlesClip("temp//temp_outro.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, color="LawnGreen"))
+
+    subtitle_height = 0.50 # 50% of the video height
 
     video = CompositeVideoClip([
         video, 
         subtitles_stroke_black.set_position(("center", 1-subtitle_height), relative=True), 
-        subtitles_stroke_white.set_position(("center", 1-subtitle_height), relative=True),  
         subtitles.set_position(("center", 1-subtitle_height), relative=True)
         ])
 
@@ -126,9 +212,7 @@ def generate_tiktok_without_speech(input_file_path, output_file_path, topic_intr
     video.write_videofile(output_file_path, codec="libx264")
 
 
-
-
-def generate_tiktok_with_speech(input_file_path, output_file_path, topic_intro, topic_outro, ai_voice):
+def generate_tiktok_with_speech(input_file_path, output_file_path, video_intro, video_outro, ai_voice):
 
     # First step: extract audio from the downloaded tiktok video
     VideoFileClip(input_file_path).audio.write_audiofile("temp//temp.mp3")
@@ -137,13 +221,18 @@ def generate_tiktok_with_speech(input_file_path, output_file_path, topic_intro, 
     i = 0
     model = whisper.load_model("base")
     transcribe = model.transcribe(audio="temp//temp.mp3", word_timestamps=True, language="en")
+    with open("temp//temp.srt", "w", encoding="utf-8") as f: pass # Generate empty file first as it might be that there are no words in the video
     for segment in transcribe['segments']:
         for word in segment['words']:
 
             i += 1
             text = word["word"]
-            word = f"{i}\n{format_time(word["start"])} --> {format_time(word["end"]) }\n{text[1:] if text[0] == ' ' else text}\n\n"
+            word = f"{i}\n{util_format_time(word["start"])} --> {util_format_time(word["end"]) }\n{text[1:] if text[0] == ' ' else text}\n\n"
             with open("temp//temp.srt", "a", encoding="utf-8") as f: f.write(word)
+
+    if os.path.getsize("temp//temp.srt") == 0: 
+        print("No words in the video, using intro captions instead.")
+        generate_tiktok_without_speech(input_file_path, output_file_path, video_intro, video_outro, ai_voice)
 
     # Third step: add the captions to the video
     method = "caption"
@@ -152,30 +241,27 @@ def generate_tiktok_with_speech(input_file_path, output_file_path, topic_intro, 
     align = "center"
 
     subtitles_stroke_black = SubtitlesClip("temp//temp.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, stroke_width=12, stroke_color="black"))
-    subtitles_stroke_white = SubtitlesClip("temp//temp.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, stroke_width=3, stroke_color="white"))
     subtitles = SubtitlesClip("temp//temp.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, color="yellow"))
 
     subtitle_height = 0.25 # 25% of the video height
 
     video = CompositeVideoClip([
-        VideoFileClip("input.mp4"), 
+        VideoFileClip(input_file_path), 
         subtitles_stroke_black.set_position(("center", 1-subtitle_height), relative=True), 
-        subtitles_stroke_white.set_position(("center", 1-subtitle_height), relative=True),  
         subtitles.set_position(("center", 1-subtitle_height), relative=True)
         ])
 
+
     # Fourth step: generate and add intro audio to the video
-    tts(topic_intro, ai_voice, "temp//temp_intro.mp3")
+    tts(video_intro, ai_voice, "temp//temp_intro.mp3")
 
     new_audio = AudioFileClip("temp//temp_intro.mp3")
     existing_audio = audio_fadein(video.audio, new_audio.duration * 2)
     combined_audio = CompositeAudioClip([existing_audio, new_audio])
     video = video.set_audio(combined_audio)
 
-
-
     # Fifth step: generate outro audio and srt
-    tts(topic_outro, ai_voice, "temp//temp_outro.mp3")
+    tts(video_outro, ai_voice, "temp//temp_outro.mp3")
 
     new_audio = AudioFileClip("temp//temp_outro.mp3")
     outro_start_time = round(video.duration-new_audio.duration, 2)
@@ -190,21 +276,24 @@ def generate_tiktok_with_speech(input_file_path, output_file_path, topic_intro, 
             text = word["word"]
             start_time = outro_start_time + word["start"]
             end_time = outro_start_time + word["end"]
-            word = f"{i}\n{format_time(start_time)} --> {format_time(end_time) }\n{text[1:] if text[0] == ' ' else text}\n\n"
+            word = f"{i}\n{util_format_time(start_time)} --> {util_format_time(end_time) }\n{text[1:] if text[0] == ' ' else text}\n\n"
             with open("temp//temp_outro.srt", "a", encoding="utf-8") as f: f.write(word)
 
 
     # Sixth step: add outro subtitles to the video
-    subtitles_stroke_black = SubtitlesClip("temp//temp_outro.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, stroke_width=12, stroke_color="black"))
-    subtitles_stroke_white = SubtitlesClip("temp//temp_outro.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, stroke_width=3, stroke_color="white"))
-    subtitles = SubtitlesClip("temp//temp_outro.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, color="green"))
+    method = "caption"
+    font = "Comic-Sans-MS-Bold"
+    fontsize = 96
+    align = "center"
 
-    subtitle_height = 0.75 # 75% of the video height
+    subtitles_stroke_black = SubtitlesClip("temp//temp_outro.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, stroke_width=12, stroke_color="black"))
+    subtitles = SubtitlesClip("temp//temp_outro.srt", lambda txt: TextClip(txt, method=method, font=font, fontsize=fontsize, align=align, color="LawnGreen"))
+
+    subtitle_height = 0.50 # 50% of the video height
 
     video = CompositeVideoClip([
         video, 
         subtitles_stroke_black.set_position(("center", 1-subtitle_height), relative=True), 
-        subtitles_stroke_white.set_position(("center", 1-subtitle_height), relative=True),  
         subtitles.set_position(("center", 1-subtitle_height), relative=True)
         ])
     
@@ -219,12 +308,80 @@ def generate_tiktok_with_speech(input_file_path, output_file_path, topic_intro, 
 
 
 
+def generate_captions(session_groq, raw_description, topic):
 
-ai_voice = Voice.UK_MALE_1
-input_file_path = "input.mp4"
-output_file_path = "output.mp4"
-topic_intro = "I want a big beautiful black lady here in Detroit to fart in my mouth with gas."
-topic_outro = "Hit that like button and subscribe for more based content!"
+    context = f"""
+Instructions:
+- Strictly follow the request.
+- Do not greet. Do not add explanations.
+- Give only the requested information, nothing else.
+"""
 
-# generate_tiktok_without_speech(input_file_path, output_file_path, topic_intro, topic_outro)
-generate_tiktok_with_speech(input_file_path, output_file_path, topic_intro, topic_outro, ai_voice)
+    prompt = [{"role": "system", "content": context}, {"role": "user", "content": f"This is description under a tiktok video, tell me what is most likely to be going on there: {raw_description}"}]
+    response = session_groq.chat.completions.create(model = "llama3-70b-8192", messages = prompt, stream = False, temperature = 0, max_tokens = 2048, stop = '"[end]"', top_p = 1)
+
+    prompt = [{"role": "system", "content": context}, {"role": "user", "content": f"Generate the text for this tiktok as if you are a 10 year old cringe kid, no hashtags, no future tense, max three sentences: {response.choices[0].message.content}"}]
+    response = session_groq.chat.completions.create(model = "llama3-70b-8192", messages = prompt, stream = False, temperature = 0, max_tokens = 2048, stop = '"[end]"', top_p = 1)
+    video_intro = response.choices[0].message.content
+
+    prompt = [{"role": "system", "content": context}, {"role": "user", "content": "Rephrase and add more relevant hashtags, up to 15 hashtags: " + raw_description}]
+    response = session_groq.chat.completions.create(model = "llama3-70b-8192", messages = prompt, stream = False, temperature = 0, max_tokens = 2048, stop = '"[end]"', top_p = 1)
+    video_description = response.choices[0].message.content
+
+    return video_intro, video_description
+
+
+# generate_tiktok_without_speech(input_file_path, output_file_path, video_intro, video_outro)
+# generate_tiktok_with_speech(input_file_path, output_file_path, video_intro, video_outro, ai_voice)
+
+
+
+if __name__ == '__main__':
+
+
+    topic = "roblox"
+    count = 5
+
+    list_ai_voices = [
+        Voice.US_FEMALE_2,
+        Voice.US_FEMALE_1,
+        # Voice.US_MALE_1,
+        # Voice.DE_MALE
+    ]
+
+    session_groq = Groq(api_key = "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")
+
+    list_video_outros = [
+        "Hit that like button and subscribe for more based content!",
+        "Smash that like button and subscribe for more awesome content!",
+        "Don’t forget to hit like and subscribe for more epic updates!",
+        "Tap that like button and subscribe for more cool stuff!",
+        "Click like and subscribe to stay updated with more great content!",
+        "Hit the like button and subscribe for more awesome videos!",
+        "Drop a like and subscribe for more top-tier content!",
+        "Hit like, subscribe, and stay tuned for more great content!",
+        "Show some love by liking and subscribing for more fun videos!",
+        "Smash the like button and hit subscribe for more amazing content!"
+    ]
+
+
+    # shutil.rmtree('./input')
+    # os.mkdir('./input')
+    # asyncio.run(download_tiktoks(count, topic))
+
+    metadata = json.load(open("input//metadata.json"))
+    videos_info = {video_dict['id']: video_dict['desc'] for video_dict in metadata}
+
+    for file in os.listdir("input"):
+        if file.endswith(".mp4"):
+
+            shutil.rmtree('./temp')
+            os.mkdir('./temp')
+
+            raw_description = videos_info.get(file.split(".")[0])
+            video_intro, video_description = generate_captions(session_groq, raw_description, topic)
+
+            print(video_intro, "\n", video_description, "\n\n")
+
+            # generate_tiktok_with_speech("input//"+file, "output//"+file, video_intro, random.choice(list_video_outros), random.choice(list_ai_voices))
+            generate_tiktok_without_speech("input//"+file, "output//"+file, video_intro, random.choice(list_video_outros), random.choice(list_ai_voices))
