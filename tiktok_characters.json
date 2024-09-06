@@ -1,0 +1,20 @@
+{
+    "characters" :[
+        {
+            "description" : "10 year old cringe kid",
+            "categories" : ["asmr", "food", "meme", "roblox"]
+        },
+        {
+            "description" : "Cristiano Ronaldo fan",
+            "categories" : ["ronaldo"]
+        },
+        {
+            "description" : "middle aged politics fanatic",
+            "categories" : ["donaldtrump"]
+        },
+        {
+            "description" : "football fan",
+            "categories" : ["epl"]
+        }
+    ]
+}
