@@ -18,6 +18,7 @@ import whisper
 import random
 import shutil
 import json
+import sys
 import os
 import re
 
@@ -58,7 +59,7 @@ def util_enhance_srt(srt_path):
 
         enhanced_lines.append(line)
 
-    with open("temp//temp.srt", "w", encoding="utf-8") as f: f.writelines(enhanced_lines)
+    with open(srt_path, "w", encoding="utf-8") as f: f.writelines(enhanced_lines)
 
 
 
@@ -124,20 +125,27 @@ def make_emoji_image(emoji):
     return np.array(image)
 
 
-
 def create_random_emoji_clips(video_duration):
     """
     Creates a list of ImageClips with emojis that appear at random times and positions.
     """
-    emojis = ["😊", "😂", "😍", "😎", "😢", "😡"]
+    emojis = [
+        ["😤", "😂", "😍", "😎", "😢", "😡"],
+        ["😊", "😂", "🤔", "🤢", "🤮", "🥵"],
+        ["🤯", "😩", "😍", "😎", "💀", "😡"],
+        ["🤯", "🤑", "😍", "🤢", "💀", "🤩"]
+    ]
 
     clips = []
-    for _ in range(10):
+
+    emoji_set = random.choice(emojis)
+
+    for _ in range(int(video_duration/2)):
         # Create the emoji image
 
         clip_duration = random.randint(2, 6)/10
 
-        emoji_image = make_emoji_image(random.choice(emojis))
+        emoji_image = make_emoji_image(random.choice(emoji_set))
         
         # Create an ImageClip from the emoji image
         emoji_clip = ImageClip(emoji_image, duration=clip_duration)
@@ -155,21 +163,6 @@ def create_random_emoji_clips(video_duration):
         clips.append(emoji_clip)
     
     return clips
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def generate_tiktok_without_speech(input_file_path, output_file_path, video_intro, video_outro, ai_voice):
@@ -397,7 +390,7 @@ if __name__ == '__main__':
         for topic in config[id]['topics']:
 
             print(f"Processing {topic.upper()} topic for {id}...")
-            response = requests.post(url + "/sendMessage", data={'chat_id': id, 'protect_content': 'true', 'text': f"Incoming {topic.upper()} videos."})
+            response = requests.post(url + "/sendMessage", data={'chat_id': id, 'protect_content': 'false', 'text': f"Incoming {topic.upper()} videos."})
 
             shutil.rmtree('./input')
             os.mkdir('./input')
@@ -422,4 +415,6 @@ if __name__ == '__main__':
                     # generate_tiktok_with_speech("input//"+file, "output//"+file, video_intro, random.choice(list_video_outros), random.choice(list_ai_voices))
                     generate_tiktok_without_speech("input//"+file, "output//"+file, video_intro, random.choice(list_video_outros), random.choice(list_ai_voices))
 
-                    with open("output//"+file, 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': id, 'protect_content': 'true', 'caption': video_description})
+                    with open("output//"+file, 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': id, 'protect_content': 'false', 'caption': video_description})
+
+                    # sys.exit()
