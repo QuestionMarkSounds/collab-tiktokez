@@ -1,0 +1,26 @@
+{
+    "characters" :{
+        "roblox": "10 year old cringe kid",
+        "ronaldo": "Cristiano Ronaldo fan",
+        "trump": "middle aged politics fanatic",
+        "european premier league": "football fan",
+        "coffee": "annoying coffee nerd",
+        "cosplay": "10yo girl anime fan",
+        "luxury": "billionaire",
+        "travel": "teenage traveler",
+        "satisfying": "10 year old cringe kid",
+        "music": "10 year old cringe kid",
+        "asmr": "10 year old cringe kid",
+        "powerwashing": "10 year old cringe kid"
+    },
+    "users": {
+        "358848662": {
+            "name": "LatviaPotatoChip",
+            "topics": ["trump", "ronaldo", "travel", "luxury", "satisfying", "european premier league"]
+        },
+        "70476847":{
+            "name": "PielessPaul",
+            "topics": ["music", "roblox", "asmr", "powerwashing", "cosplay", "coffee"]
+        }
+    }
+}

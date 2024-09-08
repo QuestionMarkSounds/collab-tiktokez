@@ -11,7 +11,7 @@ async def download_tiktoks(count, topic):
     async with TikTokApi() as api:
         await api.create_sessions(ms_tokens=[ms_token], num_sessions=1, sleep_after=3, context_options=context_options)
 
-        videos_info = []
+        videos_info = {}
         counter = 0
         async for video in api.hashtag(name=topic).videos():
             video_dict = video.as_dict
@@ -19,8 +19,10 @@ async def download_tiktoks(count, topic):
             if video_dict.get('video').get('duration') <= 20: continue
             if video_dict.get('video').get('duration') > 60: continue
 
-            info = {'id': video_dict.get('id'), 'desc': video_dict.get('desc')}
-            videos_info.append(info)
+            videos_info[video_dict.get('id')] = {
+                'desc': video_dict.get('desc'),
+                'topic': topic
+            }
 
             bitrate = video_dict['video']['bitrate']
             for i in video_dict['video']['bitrateInfo']:
@@ -30,10 +32,10 @@ async def download_tiktoks(count, topic):
                         with open("input/{}.mp4".format(video.id), "wb") as f:
                             f.write(response.content)
 
-                        counter += 1
+            counter += 1
             if counter >= count: break
 
-        with open('input//metadata.json', 'w') as file:
+        with open('input//json_metadata.json', 'w') as file:
             json.dump(videos_info, file, indent=2)
 
 if __name__ == "__main__":
