@@ -38,10 +38,8 @@ def util_format_time(seconds: float) -> str:
     return f"{hours:02}:{minutes:02}:{seconds:02},{milliseconds:03}"
 
 def util_llm(prompt):
-
     context_groq = f"Instructions:\n- Strictly follow the request.\n- Do not greet. Do not add explanations.\n- Give only the requested information, nothing else."
     prompt = [{"role": "system", "content": context_groq}, {"role": "user", "content": prompt}]
-
     response = session_groq.chat.completions.create(model = "llama3-70b-8192", messages = prompt, stream = False, temperature = 0, max_tokens = 2048, stop = '"[end]"', top_p = 1)
     return response.choices[0].message.content
 
@@ -69,6 +67,13 @@ def util_speech_to_srt(input_file_path, output_file_path):
     with open(output_file_path, "w", encoding="utf-8") as f: f.writelines(enhanced_lines)
 
 
+def util_srt_to_subtitles(input_file_path):
+
+    
+
+
+
+
 def generate_explanation(raw_video_description):
     video_explanation = util_llm(f"This is description under a tiktok video, tell me what is most likely to be going on there: {raw_video_description}")
     print("Video explanation: ", video_explanation)
@@ -90,11 +95,13 @@ def generate_intro(video_explanation, video_id, voice, personality, video_title,
     util_text_to_speech(video_intro, voice, "temp//intro.mp3")
     util_speech_to_srt("temp//intro.mp3", "temp//intro.srt")
 
+    video_intro_subtitles = util_srt_to_subtitles("temp//intro.srt")
+
+
     pass
 
 
 def generate_outro(video_id, voice):
-
     pass
 
 
@@ -119,6 +126,9 @@ if __name__ == "__main__":
     session_groq = Groq(api_key = "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")    
 
     for video_id in list_video_ids:
+
+        shutil.rmtree('./temp')
+        os.mkdir('./temp')
 
         personality = json_config['characters'][json_metadata[video_id]["topic"]]
         if personality in ["billionaire"]: voice = Voice.MALE_SANTA_NARRATION
