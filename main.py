@@ -1,7 +1,7 @@
 from moviepy.audio.fx.audio_fadeout import audio_fadeout
 from moviepy.audio.fx.audio_fadein import audio_fadein
 from moviepy.video.tools.subtitles import SubtitlesClip
-from tiktok_downloader import download_tiktoks
+from util_downloader.tiktok_downloader import download_tiktoks
 from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, AudioFileClip, CompositeAudioClip, ImageClip, VideoClip
 from moviepy.config import change_settings
 from datetime import timedelta

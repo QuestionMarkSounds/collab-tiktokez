@@ -1,4 +1,4 @@
-from tiktok_downloader import download_tiktoks
+from util_downloader.tiktok_downloader import download_tiktoks
 
 import requests
 import asyncio

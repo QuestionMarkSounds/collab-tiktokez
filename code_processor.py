@@ -1,8 +1,7 @@
 from moviepy.audio.fx.audio_fadeout import audio_fadeout
 from moviepy.audio.fx.audio_fadein import audio_fadein
 from moviepy.video.tools.subtitles import SubtitlesClip
-from tiktok_downloader import download_tiktoks
-from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, AudioFileClip, CompositeAudioClip, ImageClip, VideoClip
+from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, AudioFileClip, CompositeAudioClip, ImageClip
 from moviepy.config import change_settings
 from util_voice import Voice
 from util_voice import tts as util_text_to_speech
@@ -17,7 +16,6 @@ from pilmoji.source import AppleEmojiSource, GoogleEmojiSource, FacebookEmojiSou
 import numpy as np
 
 import requests
-import asyncio
 import whisper
 import random
 import shutil
@@ -28,6 +26,7 @@ import os
 import re
 
 
+# Util class for bouncy text animation
 class UtilBouncer:
     def __init__(self):
         self.previous_word = None
@@ -63,7 +62,7 @@ class UtilBouncer:
         self.previous_word = txt
         return result
 
-
+# Util for converting seconds to SRT format
 def util_format_time(seconds: float) -> str:
     """Formats time in seconds to SRT format hh:mm:ss,SSS."""
     td = timedelta(seconds=seconds)
@@ -80,12 +79,14 @@ def util_convert_to_seconds(timestamp):
     total_seconds = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
     return total_seconds
 
+# Util for LLM prompts
 def util_llm(prompt):
     context_groq = f"Instructions:\n- Strictly follow the request.\n- Do not greet. Do not add explanations.\n- Give only the requested information, nothing else."
     prompt = [{"role": "system", "content": context_groq}, {"role": "user", "content": prompt}]
     response = session_groq.chat.completions.create(model = "llama3-70b-8192", messages = prompt, stream = False, temperature = 0, max_tokens = 2048, stop = '"[end]"', top_p = 1)
     return response.choices[0].message.content
 
+# Util that converts speech to srt
 def util_speech_to_srt(input_file_path, output_file_path, clip_start_time):
 
     i = 0
@@ -111,7 +112,7 @@ def util_speech_to_srt(input_file_path, output_file_path, clip_start_time):
         enhanced_lines.append(line)
     with open(output_file_path, "w", encoding="utf-8") as f: f.writelines(enhanced_lines)
 
-
+# Util that creates subtitles based on srt
 def util_srt_to_subtitles(input_file_path, color):
 
     # Create an instance of WordBouncer
@@ -127,8 +128,7 @@ def util_srt_to_subtitles(input_file_path, color):
 
     return video_subtitles_stroke, video_subtitles
 
-
-
+# Util that creates emojis based on srt
 def util_srt_to_emojis(input_file_path):
 
     # Get list of words from the srt file
@@ -137,7 +137,7 @@ def util_srt_to_emojis(input_file_path):
         text_parts = re.findall(r'\d+\n(?:\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}\n)?(.+?)(?:\n\n|\Z)', content, re.DOTALL)
         text = ' '.join(text_parts).replace("'", "").replace("`", "")
         list_words = re.findall(r'\b\w+\b', text)
-        list_timestamps = re.compile(r"(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})").findall(data)
+        list_timestamps = re.compile(r"(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})").findall(content)
 
     # Split the list in chunks for better prompting
     chunk_size = 8
@@ -165,7 +165,7 @@ def util_srt_to_emojis(input_file_path):
     # Generate emoji clips
     emoji_source = AppleEmojiSource
     emoji_font = ImageFont.truetype("data//arial.ttf", 192)
-    emoji_position = ("center", 0.65)
+    emoji_position = (0.43, 0.65)
 
     list_clips = []
     for i in range(len(list_emojis)):
@@ -187,7 +187,7 @@ def util_srt_to_emojis(input_file_path):
 
     return list_clips
 
-
+# Util that creates random emoji clips
 def util_sprinkle_emojis(video_duration):
 
     list_emoji_sources = [AppleEmojiSource, GoogleEmojiSource, FacebookEmojiSource]
@@ -219,6 +219,7 @@ def util_sprinkle_emojis(video_duration):
     
     return list_clips
 
+# Util that adds audio line to the video
 def util_add_audio(path_mp3, video, type, start_time):
 
     audio_outro = AudioFileClip(path_mp3).set_start(start_time)
@@ -226,29 +227,27 @@ def util_add_audio(path_mp3, video, type, start_time):
     elif type == 'outro': audio_video_existing = audio_fadeout(video.audio, audio_outro.duration * 2)
     audio_combined = CompositeAudioClip([audio_video_existing, audio_outro])
     video = video.set_audio(audio_combined)
+    return video
 
-
+# Generate explanation of what is going on in the video based on the raw description
 def generate_explanation(raw_video_description):
     video_explanation = util_llm(f"This is description under a tiktok video, tell me what is most likely to be going on there: {raw_video_description}")
     print("Video explanation: ", video_explanation)
     return video_explanation
 
-
+# Generate clickbait title for the video
 def generate_title(video_explanation, personality):
     video_title = util_llm(f"Generate a clickbait title for this tiktok as if you are a {personality}, no hashtags, max seven words: {video_explanation}")
     print("Video title: ", video_title)
     return video_title
 
+# Generate hashtags for the videos
 def generate_description(video_explanation):
     video_description = util_llm("Generate 3 most relevant hashtags based on this description: " + video_explanation)
     print("Video description: ", video_description)
     return video_description
 
-
-
-
-
-
+# Adding intro to the video
 def add_intro_to_video(file_path, video_explanation, video_id, voice, personality, video_title, raw_video_description):
     path_intro_mp3 = "temp//intro.mp3"
     subtitles_color = "yellow"
@@ -276,10 +275,9 @@ def add_intro_to_video(file_path, video_explanation, video_id, voice, personalit
 
     # Combine the video with intro audio
     video = util_add_audio(path_intro_mp3, video, 'intro', 0)
-
     return video
 
-
+# Adding outro to the video
 def add_outro_to_video(video, video_id, voice):
     path_outro_mp3 = "temp//outro.mp3"
     subtitles_color = "lawngreen"
@@ -316,20 +314,23 @@ def add_outro_to_video(video, video_id, voice):
 
     # Combine the video with outro audio
     video = util_add_audio(path_outro_mp3, video, 'outro', outro_start_time)
-
     return video
 
-
-
-
-
+# Main
 if __name__ == "__main__":
+
+    shutil.rmtree('./output')
+    os.mkdir('./output')
 
     list_video_ids = ["7312381832148864262"]
 
+    # Settings init
     with open("input/json_metadata.json", "r") as file: json_metadata = json.load(file)
     with open("json_config.json", "r") as file: json_config = json.load(file)
-    session_groq = Groq(api_key = "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")    
+    change_settings({"IMAGEMAGICK_BINARY": r"C:\\Program Files\\ImageMagick-7.1.1-Q16-HDRI\\magick.exe"})
+    session_groq = Groq(api_key = "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")
+    token_telegram = '7522802195:AAGZQptOGdKDAkiY79t_nX8lfBViOFSLdlI'
+    url = f"https://api.telegram.org/bot{token_telegram}"  
 
     for video_id in list_video_ids:
 
@@ -349,3 +350,11 @@ if __name__ == "__main__":
         video = add_outro_to_video(video, video_id, voice)
 
         video.write_videofile(f"output//{video_id}.mp4", codec = "libx264", logger = 'bar', threads=8)
+
+        # Getting chat ID
+        for user in json_config["users"]:
+            if json_metadata[video_id]["topic"] in json_config["users"][user]["topics"]: 
+                chat_id = user
+
+        caption = f"{json_metadata[video_id]["topic"]}\n\n{video_title}\n\n{video_description}"
+        with open(f"output//{video_id}.mp4", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': chat_id, 'protect_content': 'false', 'caption': caption})
