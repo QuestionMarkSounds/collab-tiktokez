@@ -82,10 +82,8 @@ def util_format_time(seconds: float) -> str:
 
 # Util for converting a timestamp to seconds
 def util_convert_to_seconds(timestamp):
-
     hours, minutes, seconds = timestamp.replace(',', '.').split(':')
     total_seconds = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
-    
     return total_seconds
 
 
