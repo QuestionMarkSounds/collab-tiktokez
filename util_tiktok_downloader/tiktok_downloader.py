@@ -9,7 +9,7 @@ context_options = {'viewport' : { 'width': 1280, 'height': 1024 }, 'user_agent' 
 
 with open('json_metadata.json', 'r') as f: json_metadata = json.load(f)
 
-async def download_tiktoks(count, topic):
+async def download_tiktoks(count, topic, duration_min = 20, duration_max = 60):
     async with TikTokApi() as api:
         await api.create_sessions(ms_tokens=[ms_token], num_sessions=1, sleep_after=3, context_options=context_options)
 
@@ -17,8 +17,8 @@ async def download_tiktoks(count, topic):
         async for video in api.hashtag(name=f"{topic}").videos():
             video_dict = video.as_dict
 
-            if video_dict.get('video').get('duration') <= 20: continue
-            if video_dict.get('video').get('duration') > 60: continue
+            if video_dict.get('video').get('duration') <= duration_min: continue
+            if video_dict.get('video').get('duration') > duration_max: continue
 
             json_metadata[f"{topic}_{counter+1}"] = video_dict.get('desc')
 

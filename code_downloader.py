@@ -28,12 +28,15 @@ if __name__ == '__main__':
     for id in json_config["users"]:
         for topic in json_config["users"][id]['topics']:
             print(f"Downloading raw {topic.upper()} topic videos for {id}...")
-            asyncio.run(download_tiktoks(clip_count, topic))
-
+            if topic in ["luxury"]:
+                asyncio.run(download_tiktoks(clip_count, topic, duration_min=8, duration_max=30))
+            else:
+                asyncio.run(download_tiktoks(clip_count, topic))
+                
     json_metadata = json.load(open("json_metadata.json"))
     for user in json_config['users']:
         for topic in json_config['users'][user]['topics']:
             for file in os.listdir("input"):
                 if file.endswith(".mp4"):
                     if file.split("_")[0] == topic:
-                        with open("input//"+file, 'rb') as video_file: requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': id, 'protect_content': 'false', 'caption': f"{file.split(".")[0]}"})
+                        with open("input//"+file, 'rb') as video_file: requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': id, 'protect_content': 'false', 'caption': file.split(".")[0]})

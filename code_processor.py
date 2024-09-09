@@ -11,6 +11,10 @@ from emoji import UNICODE_EMOJI_ENGLISH
 from groq import Groq
 from PIL import ImageFont, Image
 
+from pydub import AudioSegment
+from pydub.effects import compress_dynamic_range
+
+
 from pilmoji.source import AppleEmojiSource, GoogleEmojiSource, FacebookEmojiSource
 
 import numpy as np
@@ -80,10 +84,10 @@ def util_convert_to_seconds(timestamp):
     return total_seconds
 
 # Util for LLM prompts
-def util_llm(prompt):
+def util_llm(prompt, temperature = 0):
     context_groq = f"Instructions:\n- Strictly follow the request.\n- Do not greet. Do not add explanations.\n- Give only the requested information, nothing else."
     prompt = [{"role": "system", "content": context_groq}, {"role": "user", "content": prompt}]
-    response = session_groq.chat.completions.create(model = "llama3-70b-8192", messages = prompt, stream = False, temperature = 0, max_tokens = 2048, stop = '"[end]"', top_p = 1)
+    response = session_groq.chat.completions.create(model = "llama3-70b-8192", messages = prompt, stream = False, temperature = temperature, max_tokens = 2048, stop = '"[end]"', top_p = 1)
     return response.choices[0].message.content
 
 # Util that converts speech to srt
@@ -220,12 +224,15 @@ def util_sprinkle_emojis(video_duration):
     return list_clips
 
 # Util that adds audio line to the video
-def util_add_audio(path_mp3, video, type, start_time):
+def util_add_audio(path_mp3, video, type, start_time, remove_original_audio = False):
 
     audio_outro = AudioFileClip(path_mp3).set_start(start_time)
     if type == 'intro': audio_video_existing = audio_fadein(video.audio, audio_outro.duration * 2)
     elif type == 'outro': audio_video_existing = audio_fadeout(video.audio, audio_outro.duration * 2)
-    audio_combined = CompositeAudioClip([audio_video_existing, audio_outro])
+    # Fixes artifacts at the end of audio
+    audio_outro = audio_outro.audio_fadeout(0.1)
+    if remove_original_audio: audio_combined = CompositeAudioClip([audio_outro])
+    else: audio_combined = CompositeAudioClip([audio_video_existing, audio_outro])
     video = video.set_audio(audio_combined)
     return video
 
@@ -252,15 +259,18 @@ def add_intro_to_video(file_path, video_explanation, video_id, voice, personalit
     path_intro_mp3 = "temp//intro.mp3"
     subtitles_color = "yellow"
     subtitles_height = 0.25
-
-    if (personality == "billionaire"): video_intro = util_llm(f"Generate a random viral one-sentence short saying for success")
-    else: video_intro = util_llm(f"Generate the text for this tiktok as if you are a {personality}, no hashtags, no future tense, max two sentences: {video_explanation}")
-    video_intro = video_title + ". " + video_intro # appending clickbait title to get 3 second rule
+    luxury_saying_themes = ["wealth", "success", "dreams", "recognition"]
+    if (personality == "billionaire"):  
+        video_intro = util_llm("Generate a random one-sentence short saying about {}".format(random.choice(luxury_saying_themes)), temperature= 0.5)
+    else: 
+        video_intro = util_llm(f"Generate the text for this tiktok as if you are a {personality}, no hashtags, no future tense, max two sentences: {video_explanation}")
+        video_intro = video_title + ". " + video_intro # appending clickbait title to get 3 second rule
     print("Video intro: ", video_intro)
 
     util_text_to_speech(video_intro, voice, path_intro_mp3)
     util_speech_to_srt(path_intro_mp3, "temp//intro.srt", 0)
-
+    # if (personality == "billionaire"):
+    #     luxury_audio_processing("temp//intro.mp3")
     # Get subtitle and emoji clips
     video_subtitles_stroke, video_subtitles = util_srt_to_subtitles("temp//intro.srt", subtitles_color)
     clips_subtitles_emojis = util_srt_to_emojis("temp//intro.srt")
@@ -316,13 +326,38 @@ def add_outro_to_video(video, video_id, voice):
     video = util_add_audio(path_outro_mp3, video, 'outro', outro_start_time)
     return video
 
+def add_intro_outro_without_original_audio(video_path, intro_path, outro_path = None, output_path = "output//output_CR_F.mp4", short_content = False):
+    # Load the video file (video without audio yet)
+    video = VideoFileClip(video_path)
+    
+    # Load intro and outro audio using pydub
+    video = util_add_audio(intro_path, video, 'intro', 0, remove_original_audio=True)
+
+    if outro_path != None and not short_content:
+        outro_start_time = round(video.duration-AudioFileClip(outro_path).duration, 2)
+        video = util_add_audio(outro_path, video, 'outro', outro_start_time)
+    
+    
+    video.write_videofile(output_path, codec = "libx264", logger = 'bar', threads=8)
+
+def luxury_audio_processing(file_path):
+    # Load your audio file
+    audio = AudioSegment.from_file(file_path)
+
+    # Apply dynamic range compression
+    compressed_audio = compress_dynamic_range(audio, attack=15, threshold=-20, ratio=2)
+
+    # Export the compressed audio
+    compressed_audio.export(file_path, format="mp3")
+
+
 # Main
 if __name__ == "__main__":
 
     shutil.rmtree('./output')
     os.mkdir('./output')
 
-    list_video_ids = ["music_2"]
+    list_video_ids = ["luxury_2"]
 
     # Settings init
     with open("json_metadata.json", "r") as file: json_metadata = json.load(file)
@@ -340,18 +375,26 @@ if __name__ == "__main__":
         file_path = f"input//{video_id}.mp4"
         video_topic = video_id.split("_")[0]
         video_personality = json_config['characters'][video_topic]
-
-        if video_personality in ["billionaire"]: voice = Voice.MALE_SANTA_NARRATION
-        else: voice = random.choice([Voice.US_FEMALE_1, Voice.US_FEMALE_2])
+        short_content = False
+        if video_personality in ["billionaire"]: 
+            short_content = True
+            voice = Voice.MALE_NARRATION
+        else: 
+            voice = random.choice([Voice.US_FEMALE_1, Voice.US_FEMALE_2])
 
         video_explanation = generate_explanation(json_metadata[video_id])
         video_title = generate_title(video_explanation, video_personality)
         video_description = generate_description(video_explanation)
+        if not short_content:
+            video = add_intro_to_video(file_path, video_explanation, video_id, voice, video_personality, video_title, json_metadata[video_id])
+            video = add_outro_to_video(video, video_id, voice)
+        else:
+            video = add_intro_to_video(file_path, video_explanation, video_id, voice, video_personality, "", json_metadata[video_id])
+           
 
-        video = add_intro_to_video(file_path, video_explanation, video_id, voice, video_personality, video_title, json_metadata[video_id])
-        video = add_outro_to_video(video, video_id, voice)
+        video.write_videofile(f"output//{video_id}.mp4", codec = "libx264", logger = 'bar', threads=4)
 
-        video.write_videofile(f"output//{video_id}.mp4", codec = "libx264", logger = 'bar', threads=8)
+        copyright_friendly_video = add_intro_outro_without_original_audio(f"output//{video_id}.mp4", "temp//intro.mp3", "temp//outro.mp3", f"output//{video_id}_CR_F.mp4", short_content=short_content)
 
         # Getting chat ID
         for user in json_config["users"]:
@@ -360,4 +403,5 @@ if __name__ == "__main__":
 
         caption = f"{video_topic.upper()}\n\n{video_title}\n\n{video_description}"
         # with open(f"output//{video_id}.mp4", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': chat_id, 'protect_content': 'false', 'caption': caption})
-        with open(f"output//{video_id}.mp4", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': "70476847", 'protect_content': 'false', 'caption': caption})
+        with open(f"output//{video_id}.mp4", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': "358848662", 'protect_content': 'false', 'caption': caption})
+        with open(f"output//{video_id}_CR_F.mp4", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': "358848662", 'protect_content': 'false', 'caption': "CR_F: "+caption})
