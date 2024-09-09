@@ -230,8 +230,15 @@ def util_add_audio(path_mp3, video, type, start_time):
     return video
 
 # Generate explanation of what is going on in the video based on the raw description
-def generate_explanation(raw_video_description):
-    video_explanation = util_llm(f"This is description under a tiktok video, tell me what is most likely to be going on there: {raw_video_description}")
+def generate_explanation(file_path, raw_video_description):
+
+    file_audio = VideoFileClip(file_path).audio
+    file_audio.write_audiofile("temp//description.mp3")
+
+    model = whisper.load_model("base")
+    video_transcription = model.transcribe("temp//description.mp3", language="en")['text']
+
+    video_explanation = util_llm(f"You are given audio transcription of a tiktok and a description, tell me what is most likely to be going on there: \nTranscription: {video_transcription}\nDescription: {raw_video_description}")
     print("Video explanation: ", video_explanation)
     return video_explanation
 
@@ -322,7 +329,7 @@ if __name__ == "__main__":
     shutil.rmtree('./output')
     os.mkdir('./output')
 
-    list_video_ids = ["music_2"]
+    list_video_ids = ["cosplay_1"]
 
     # Settings init
     with open("json_metadata.json", "r") as file: json_metadata = json.load(file)
@@ -344,7 +351,7 @@ if __name__ == "__main__":
         if video_personality in ["billionaire"]: voice = Voice.MALE_SANTA_NARRATION
         else: voice = random.choice([Voice.US_FEMALE_1, Voice.US_FEMALE_2])
 
-        video_explanation = generate_explanation(json_metadata[video_id])
+        video_explanation = generate_explanation(file_path, json_metadata[video_id])
         video_title = generate_title(video_explanation, video_personality)
         video_description = generate_description(video_explanation)
 

@@ -2,7 +2,6 @@ import asyncio
 import os
 from TikTokApi import TikTokApi
 import requests
-import random
 import json
 
 ms_token = os.environ.get("ms_token", None) 
@@ -16,8 +15,9 @@ async def download_tiktoks(count, topic):
 
         counter = 0
         # async for video in api.hashtag(name=f"{topic}").videos():
-        async for video in api.hashtag(name=f"{topic}").videos(count=30, cursor=random.randint(0, 150)):
+        async for video in api.trending().videos():
             video_dict = video.as_dict
+            print(json.dumps(video_dict, indent=2))
 
             if video_dict.get('video').get('duration') <= 20: continue
             if video_dict.get('video').get('duration') > 60: continue
@@ -39,4 +39,4 @@ async def download_tiktoks(count, topic):
             json.dump(json_metadata, file, indent=2)
 
 if __name__ == "__main__":
-    asyncio.run(download_tiktoks(5, "recipe"))
+    asyncio.run(download_tiktoks(1, "Trump"))

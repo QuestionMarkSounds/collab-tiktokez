@@ -5,7 +5,7 @@ from util_downloader.tiktok_downloader import download_tiktoks
 from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, AudioFileClip, CompositeAudioClip, ImageClip, VideoClip
 from moviepy.config import change_settings
 from datetime import timedelta
-from util_voice import Voice, tts
+from util_text_to_speech import Voice, tts
 from pilmoji import Pilmoji
 from emoji import UNICODE_EMOJI_ENGLISH
 from groq import Groq
