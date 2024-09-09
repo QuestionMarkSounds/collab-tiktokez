@@ -3,8 +3,8 @@ from moviepy.audio.fx.audio_fadein import audio_fadein
 from moviepy.video.tools.subtitles import SubtitlesClip
 from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, AudioFileClip, CompositeAudioClip, ImageClip
 from moviepy.config import change_settings
-from util_voice import Voice
-from util_voice import tts as util_text_to_speech
+from util_text_to_speech import Voice
+from util_text_to_speech import tts as util_text_to_speech
 from datetime import timedelta
 from pilmoji import Pilmoji
 from emoji import UNICODE_EMOJI_ENGLISH
@@ -165,7 +165,7 @@ def util_srt_to_emojis(input_file_path):
     # Generate emoji clips
     emoji_source = AppleEmojiSource
     emoji_font = ImageFont.truetype("data//arial.ttf", 192)
-    emoji_position = (0.43, 0.65)
+    emoji_position = (0.415, 0.65)
 
     list_clips = []
     for i in range(len(list_emojis)):
@@ -239,13 +239,13 @@ def generate_explanation(raw_video_description):
 def generate_title(video_explanation, personality):
     video_title = util_llm(f"Generate a clickbait title for this tiktok as if you are a {personality}, no hashtags, max seven words: {video_explanation}")
     print("Video title: ", video_title)
-    return video_title
+    return video_title.replace('"', '').replace("'", '')
 
 # Generate hashtags for the videos
 def generate_description(video_explanation):
     video_description = util_llm("Generate 3 most relevant hashtags based on this description: " + video_explanation)
     print("Video description: ", video_description)
-    return video_description
+    return video_description.replace('"', '').replace("'", '')
 
 # Adding intro to the video
 def add_intro_to_video(file_path, video_explanation, video_id, voice, personality, video_title, raw_video_description):
@@ -271,7 +271,7 @@ def add_intro_to_video(file_path, video_explanation, video_id, voice, personalit
         VideoFileClip(file_path), 
         video_subtitles_stroke.set_position(("center", 1-subtitles_height), relative=True), 
         video_subtitles.set_position(("center", 1-subtitles_height), relative=True),
-    ] + clips_subtitles_emojis + clips_sprinkle_emojis)
+    ] + clips_subtitles_emojis + clips_sprinkle_emojis) # 
 
     # Combine the video with intro audio
     video = util_add_audio(path_intro_mp3, video, 'intro', 0)
@@ -322,10 +322,10 @@ if __name__ == "__main__":
     shutil.rmtree('./output')
     os.mkdir('./output')
 
-    list_video_ids = ["7312381832148864262"]
+    list_video_ids = ["music_2"]
 
     # Settings init
-    with open("input/json_metadata.json", "r") as file: json_metadata = json.load(file)
+    with open("json_metadata.json", "r") as file: json_metadata = json.load(file)
     with open("json_config.json", "r") as file: json_config = json.load(file)
     change_settings({"IMAGEMAGICK_BINARY": r"C:\\Program Files\\ImageMagick-7.1.1-Q16-HDRI\\magick.exe"})
     session_groq = Groq(api_key = "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")
@@ -338,23 +338,26 @@ if __name__ == "__main__":
         os.mkdir('./temp')
 
         file_path = f"input//{video_id}.mp4"
-        personality = json_config['characters'][json_metadata[video_id]["topic"]]
-        if personality in ["billionaire"]: voice = Voice.MALE_SANTA_NARRATION
+        video_topic = video_id.split("_")[0]
+        video_personality = json_config['characters'][video_topic]
+
+        if video_personality in ["billionaire"]: voice = Voice.MALE_SANTA_NARRATION
         else: voice = random.choice([Voice.US_FEMALE_1, Voice.US_FEMALE_2])
 
-        video_explanation = generate_explanation(json_metadata[video_id]["desc"])
-        video_title = generate_title(video_explanation, personality)
+        video_explanation = generate_explanation(json_metadata[video_id])
+        video_title = generate_title(video_explanation, video_personality)
         video_description = generate_description(video_explanation)
 
-        video = add_intro_to_video(file_path, video_explanation, video_id, voice, personality, video_title, json_metadata[video_id]["desc"])
+        video = add_intro_to_video(file_path, video_explanation, video_id, voice, video_personality, video_title, json_metadata[video_id])
         video = add_outro_to_video(video, video_id, voice)
 
         video.write_videofile(f"output//{video_id}.mp4", codec = "libx264", logger = 'bar', threads=8)
 
         # Getting chat ID
         for user in json_config["users"]:
-            if json_metadata[video_id]["topic"] in json_config["users"][user]["topics"]: 
+            if video_topic in json_config["users"][user]["topics"]: 
                 chat_id = user
 
-        caption = f"{json_metadata[video_id]["topic"]}\n\n{video_title}\n\n{video_description}"
-        with open(f"output//{video_id}.mp4", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': chat_id, 'protect_content': 'false', 'caption': caption})
+        caption = f"{video_topic.upper()}\n\n{video_title}\n\n{video_description}"
+        # with open(f"output//{video_id}.mp4", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': chat_id, 'protect_content': 'false', 'caption': caption})
+        with open(f"output//{video_id}.mp4", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': "70476847", 'protect_content': 'false', 'caption': caption})
