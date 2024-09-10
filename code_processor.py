@@ -11,10 +11,6 @@ from emoji import UNICODE_EMOJI_ENGLISH
 from groq import Groq
 from PIL import ImageFont, Image
 
-from pydub import AudioSegment
-from pydub.effects import compress_dynamic_range
-
-
 from pilmoji.source import AppleEmojiSource, GoogleEmojiSource, FacebookEmojiSource
 
 import numpy as np
@@ -192,7 +188,7 @@ def util_srt_to_emojis(input_file_path):
     return list_clips
 
 # Util that creates random emoji clips
-def util_sprinkle_emojis(video_duration):
+def util_sprinkle_emojis(video_duration, custom_emoji_set = None):
 
     list_emoji_sources = [AppleEmojiSource, GoogleEmojiSource, FacebookEmojiSource]
     emoji_font = ImageFont.truetype("data//arial.ttf", 192)
@@ -201,7 +197,7 @@ def util_sprinkle_emojis(video_duration):
         ["😊", "😂", "🤔", "🤢", "🤮", "🥵"],
         ["🤯", "😩", "😍", "😎", "💀", "😡"],
         ["🤯", "🤑", "😍", "🤢", "💀", "🤩"]
-    ])
+    ]) if not custom_emoji_set else custom_emoji_set
 
     list_clips = []
     for i in range(int(video_duration/2)):
@@ -209,7 +205,7 @@ def util_sprinkle_emojis(video_duration):
         emoji_duration = random.randint(2, 6)/10
         emoji_position = (random.choice([0.1, 0.8]), random.uniform(0.75, 0.85))
         emoji_start_time = random.uniform(0, video_duration - emoji_duration)
-        emoji_source = random.choice(list_emoji_sources)
+        emoji_source = random.choice(list_emoji_sources) 
 
         # Create the emoji image from the character
         with Image.new("RGBA", (200, 200), (0, 0, 0, 0)) as image:
@@ -224,13 +220,14 @@ def util_sprinkle_emojis(video_duration):
     return list_clips
 
 # Util that adds audio line to the video
-def util_add_audio(path_mp3, video, type, start_time, remove_original_audio = False):
+def util_add_audio(path_mp3, video, type, start_time, remove_original_audio = False, no_fadeout = False):
 
     audio_outro = AudioFileClip(path_mp3).set_start(start_time)
+    audio_video_existing = video.audio
     if type == 'intro': audio_video_existing = audio_fadein(video.audio, audio_outro.duration * 2)
-    elif type == 'outro': audio_video_existing = audio_fadeout(video.audio, audio_outro.duration * 2)
+    elif type == 'outro' and not no_fadeout: audio_video_existing = audio_fadeout(video.audio, audio_outro.duration * 2)
     # Fixes artifacts at the end of audio
-    audio_outro = audio_outro.audio_fadeout(0.1)
+    audio_outro = audio_fadeout(audio_outro, 0.1)
     if remove_original_audio: audio_combined = CompositeAudioClip([audio_outro])
     else: audio_combined = CompositeAudioClip([audio_video_existing, audio_outro])
     video = video.set_audio(audio_combined)
@@ -255,7 +252,7 @@ def generate_description(video_explanation):
     return video_description.replace('"', '').replace("'", '')
 
 # Adding intro to the video
-def add_intro_to_video(file_path, video_explanation, video_id, voice, personality, video_title, raw_video_description):
+def add_intro_to_video(file_path, video_explanation, video_id, voice, personality, video_title, raw_video_description, exclude_intro_audio_and_text = False, emoji_set = None):
     path_intro_mp3 = "temp//intro.mp3"
     subtitles_color = "yellow"
     subtitles_height = 0.25
@@ -265,26 +262,35 @@ def add_intro_to_video(file_path, video_explanation, video_id, voice, personalit
     else: 
         video_intro = util_llm(f"Generate the text for this tiktok as if you are a {personality}, no hashtags, no future tense, max two sentences: {video_explanation}")
         video_intro = video_title + ". " + video_intro # appending clickbait title to get 3 second rule
+
     print("Video intro: ", video_intro)
 
     util_text_to_speech(video_intro, voice, path_intro_mp3)
     util_speech_to_srt(path_intro_mp3, "temp//intro.srt", 0)
-    # if (personality == "billionaire"):
-    #     luxury_audio_processing("temp//intro.mp3")
+
     # Get subtitle and emoji clips
     video_subtitles_stroke, video_subtitles = util_srt_to_subtitles("temp//intro.srt", subtitles_color)
     clips_subtitles_emojis = util_srt_to_emojis("temp//intro.srt")
-    clips_sprinkle_emojis = util_sprinkle_emojis(VideoFileClip(file_path).duration)
+    clips_sprinkle_emojis = util_sprinkle_emojis(VideoFileClip(file_path).duration, emoji_set)
 
     # Combine the video with subtitle and emoji clips
-    video = CompositeVideoClip([
-        VideoFileClip(file_path), 
-        video_subtitles_stroke.set_position(("center", 1-subtitles_height), relative=True), 
-        video_subtitles.set_position(("center", 1-subtitles_height), relative=True),
-    ] + clips_subtitles_emojis + clips_sprinkle_emojis) # 
+    if not exclude_intro_audio_and_text:
+        video = CompositeVideoClip([
+            VideoFileClip(file_path), 
+            video_subtitles_stroke.set_position(("center", 1-subtitles_height), relative=True), 
+            video_subtitles.set_position(("center", 1-subtitles_height), relative=True),
+        ] + clips_subtitles_emojis + clips_sprinkle_emojis) # 
+            # Combine the video with intro audio
+        video = util_add_audio(path_intro_mp3, video, 'intro', 0)
 
-    # Combine the video with intro audio
-    video = util_add_audio(path_intro_mp3, video, 'intro', 0)
+    else:
+        video = CompositeVideoClip([
+            VideoFileClip(file_path), 
+            # video_subtitles_stroke.set_position(("center", 1-subtitles_height), relative=True), 
+            # video_subtitles.set_position(("center", 1-subtitles_height), relative=True),
+        ] # + clips_subtitles_emojis
+        + clips_sprinkle_emojis) # 
+
     return video
 
 # Adding outro to the video
@@ -326,16 +332,19 @@ def add_outro_to_video(video, video_id, voice):
     video = util_add_audio(path_outro_mp3, video, 'outro', outro_start_time)
     return video
 
-def add_intro_outro_without_original_audio(video_path, intro_path, outro_path = None, output_path = "output//output_CR_F.mp4", short_content = False):
+def add_intro_outro_without_original_audio(video_path, intro_path, outro_path = None, output_path = "output//output_CR_F.mp4", short_content = False,  exclude_intro_audio_and_text = False):
     # Load the video file (video without audio yet)
     video = VideoFileClip(video_path)
     
     # Load intro and outro audio using pydub
-    video = util_add_audio(intro_path, video, 'intro', 0, remove_original_audio=True)
+    if exclude_intro_audio_and_text: 
+        video = video.without_audio()
+    else:
+        video = util_add_audio(intro_path, video, 'intro', 0, remove_original_audio=True)
 
     if outro_path != None and not short_content:
         outro_start_time = round(video.duration-AudioFileClip(outro_path).duration, 2)
-        video = util_add_audio(outro_path, video, 'outro', outro_start_time)
+        video = util_add_audio(outro_path, video, 'outro', outro_start_time, no_fadeout=True)
     
     
     video.write_videofile(output_path, codec = "libx264", logger = 'bar', threads=8)
@@ -357,7 +366,13 @@ if __name__ == "__main__":
     shutil.rmtree('./output')
     os.mkdir('./output')
 
-    list_video_ids = ["luxury_2"]
+    # Input parameters
+    list_video_ids = ["luxury_3"]
+    user_id = "358848662"
+    exclude_intro_audio_and_text = True
+    custom_video_explanation = None
+    custom_video_title = None
+    emoji_set = ["🤯", "😩", "😍", "😎", "💀", "😡"] # emoji_set = None -> selects set at random; emoji_set = ["🤯", "🤑", "😍", "🤢", "💀", "🤩"] -> uses this set
 
     # Settings init
     with open("json_metadata.json", "r") as file: json_metadata = json.load(file)
@@ -382,19 +397,19 @@ if __name__ == "__main__":
         else: 
             voice = random.choice([Voice.US_FEMALE_1, Voice.US_FEMALE_2])
 
-        video_explanation = generate_explanation(json_metadata[video_id])
-        video_title = generate_title(video_explanation, video_personality)
+        video_explanation = custom_video_explanation if custom_video_explanation != None else  generate_explanation(json_metadata[video_id])
+        video_title =  custom_video_title if custom_video_title != None else generate_title(video_explanation, video_personality)  
         video_description = generate_description(video_explanation)
         if not short_content:
-            video = add_intro_to_video(file_path, video_explanation, video_id, voice, video_personality, video_title, json_metadata[video_id])
+            video = add_intro_to_video(file_path, video_explanation, video_id, voice, video_personality, video_title, json_metadata[video_id], exclude_intro_audio_and_text = exclude_intro_audio_and_text, emoji_set = emoji_set)
             video = add_outro_to_video(video, video_id, voice)
         else:
-            video = add_intro_to_video(file_path, video_explanation, video_id, voice, video_personality, "", json_metadata[video_id])
+            video = add_intro_to_video(file_path, video_explanation, video_id, voice, video_personality, "", json_metadata[video_id], exclude_intro_audio_and_text = exclude_intro_audio_and_text, emoji_set = emoji_set)
            
 
-        video.write_videofile(f"output//{video_id}.mp4", codec = "libx264", logger = 'bar', threads=4)
+        video.write_videofile(f"output//{video_id}.mov", codec = "libx264", logger = 'bar', threads=4)
 
-        copyright_friendly_video = add_intro_outro_without_original_audio(f"output//{video_id}.mp4", "temp//intro.mp3", "temp//outro.mp3", f"output//{video_id}_CR_F.mp4", short_content=short_content)
+        copyright_friendly_video = add_intro_outro_without_original_audio(f"output//{video_id}.mov", "temp//intro.mp3", "temp//outro.mp3", f"output//{video_id}_CR_F.mov", short_content=short_content,  exclude_intro_audio_and_text = exclude_intro_audio_and_text)
 
         # Getting chat ID
         for user in json_config["users"]:
@@ -403,5 +418,5 @@ if __name__ == "__main__":
 
         caption = f"{video_topic.upper()}\n\n{video_title}\n\n{video_description}"
         # with open(f"output//{video_id}.mp4", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': chat_id, 'protect_content': 'false', 'caption': caption})
-        with open(f"output//{video_id}.mp4", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': "358848662", 'protect_content': 'false', 'caption': caption})
-        with open(f"output//{video_id}_CR_F.mp4", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': "358848662", 'protect_content': 'false', 'caption': "CR_F: "+caption})
+        with open(f"output//{video_id}.mov", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': user_id, 'protect_content': 'false', 'caption': caption})
+        with open(f"output//{video_id}_CR_F.mov", 'rb') as video_file: response = requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': user_id, 'protect_content': 'false', 'caption': "CR_F: "+caption})
