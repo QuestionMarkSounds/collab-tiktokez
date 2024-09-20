@@ -11,6 +11,9 @@ if __name__ == '__main__':
     shutil.rmtree('./input')
     os.mkdir('./input')
     with open('json_metadata.json', 'w') as file: json.dump({}, file)
+
+# "topics": ["skincare", "cosplay", "recipe", "diy", "dance", "powerwashing", "roblox"]
+
     from util_tiktok_downloader.tiktok_downloader import download_tiktoks
 
     test = True
@@ -30,10 +33,10 @@ if __name__ == '__main__':
             print(f"Downloading raw {topic.upper()} topic videos for {id}...")
             asyncio.run(download_tiktoks(clip_count, topic))
 
-    json_metadata = json.load(open("json_metadata.json"))
-    for user in json_config['users']:
-        for topic in json_config['users'][user]['topics']:
-            for file in os.listdir("input"):
-                if file.endswith(".mp4"):
-                    if file.split("_")[0] == topic:
-                        with open("input//"+file, 'rb') as video_file: requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': id, 'protect_content': 'false', 'caption': f"{file.split(".")[0]}"})
+    # json_metadata = json.load(open("json_metadata.json"))
+    # for user in json_config['users']:
+    #     for topic in json_config['users'][user]['topics']:
+    #         for file in os.listdir("input"):
+    #             if file.endswith(".mp4"):
+    #                 if file.split("_")[0] == topic:
+    #                     with open("input//"+file, 'rb') as video_file: requests.post(url + "/sendVideo", files={'video': video_file}, data={'chat_id': id, 'protect_content': 'false', 'caption': f"{file.split(".")[0]}"})

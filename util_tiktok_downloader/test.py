@@ -1,42 +1,22 @@
-import asyncio
+
 import os
-from TikTokApi import TikTokApi
-import requests
-import json
+from openai import OpenAI
 
-ms_token = os.environ.get("ms_token", None) 
-context_options = {'viewport' : { 'width': 1280, 'height': 1024 }, 'user_agent' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36'}
+client = OpenAI(
+    # This is the default and can be omitted
+    api_key="sk-proj-0U1etEdNPyfN0tEvklyVT3BlbkFJ0899XXITmyGhvlsfA7eS",
+)
 
-with open('json_metadata.json', 'r') as f: json_metadata = json.load(f)
+stream = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "hello how are you"}],
+    stream=True,
+)
 
-async def download_tiktoks(count, topic):
-    async with TikTokApi() as api:
-        await api.create_sessions(ms_tokens=[ms_token], num_sessions=1, sleep_after=3, context_options=context_options)
+buffer = ""
+for chunk in stream:
+    content = chunk.choices[0].delta.content
+    if content is not None: buffer += content
 
-        counter = 0
-        # async for video in api.hashtag(name=f"{topic}").videos():
-        async for video in api.trending().videos():
-            video_dict = video.as_dict
-            print(json.dumps(video_dict, indent=2))
-
-            if video_dict.get('video').get('duration') <= 20: continue
-            if video_dict.get('video').get('duration') > 60: continue
-
-            json_metadata[f"{topic}_{counter+1}"] = video_dict.get('desc')
-
-            bitrate = video_dict['video']['bitrate']
-            for i in video_dict['video']['bitrateInfo']:
-                if bitrate == i["Bitrate"]:
-                    response = requests.get(i["PlayAddr"]["UrlList"][-1])
-                    if response.status_code == 200:
-                        with open("input/{}.mp4".format(f"{topic}_{counter+1}"), "wb") as f:
-                            f.write(response.content)
-
-            counter += 1
-            if counter >= count: break
-
-        with open('json_metadata.json', 'w') as file:
-            json.dump(json_metadata, file, indent=2)
-
-if __name__ == "__main__":
-    asyncio.run(download_tiktoks(1, "Trump"))
+    print(buffer)
+    

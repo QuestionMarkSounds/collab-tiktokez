@@ -244,7 +244,7 @@ def generate_explanation(file_path, raw_video_description):
 
 # Generate clickbait title for the video
 def generate_title(video_explanation, personality):
-    video_title = util_llm(f"Generate a clickbait title for this tiktok as if you are a {personality}, no hashtags, max seven words: {video_explanation}")
+    video_title = util_llm(f"Generate a short title for this tiktok as if you are a {personality}, no hashtags, max seven words: {video_explanation}")
     print("Video title: ", video_title)
     return video_title.replace('"', '').replace("'", '')
 
@@ -329,11 +329,11 @@ if __name__ == "__main__":
     shutil.rmtree('./output')
     os.mkdir('./output')
 
-    list_video_ids = ["cosplay_1"]
+    list_video_ids = ["satisfying_4", "travel_1", "luxury_1"]
 
     # Settings init
     with open("json_metadata.json", "r") as file: json_metadata = json.load(file)
-    with open("json_config.json", "r") as file: json_config = json.load(file)
+    with open("json_config_test.json", "r") as file: json_config = json.load(file)
     change_settings({"IMAGEMAGICK_BINARY": r"C:\\Program Files\\ImageMagick-7.1.1-Q16-HDRI\\magick.exe"})
     session_groq = Groq(api_key = "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")
     token_telegram = '7522802195:AAGZQptOGdKDAkiY79t_nX8lfBViOFSLdlI'
@@ -349,11 +349,14 @@ if __name__ == "__main__":
         video_personality = json_config['characters'][video_topic]
 
         if video_personality in ["billionaire"]: voice = Voice.MALE_SANTA_NARRATION
-        else: voice = random.choice([Voice.US_FEMALE_1, Voice.US_FEMALE_2])
+        # else: voice = random.choice([Voice.US_FEMALE_1, Voice.US_FEMALE_2])
+        else: voice = Voice.US_FEMALE_2
 
         video_explanation = generate_explanation(file_path, json_metadata[video_id])
+        # video_explanation = "A 25 yo woman makeup asrm tutorial getting ready for a date"
         video_title = generate_title(video_explanation, video_personality)
         video_description = generate_description(video_explanation)
+        
 
         video = add_intro_to_video(file_path, video_explanation, video_id, voice, video_personality, video_title, json_metadata[video_id])
         video = add_outro_to_video(video, video_id, voice)
