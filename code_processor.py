@@ -255,7 +255,7 @@ def generate_description(video_explanation):
     return video_description.replace('"', '').replace("'", '')
 
 # Adding intro to the video
-def add_intro_to_video(file_path, video_explanation, video_id, voice, personality, video_title, raw_video_description):
+def add_intro_to_video(file_path, video_explanation, video_id, voice, personality, video_title):
     path_intro_mp3 = "temp//intro.mp3"
     subtitles_color = "yellow"
     subtitles_height = 0.25
@@ -337,7 +337,7 @@ if __name__ == "__main__":
     change_settings({"IMAGEMAGICK_BINARY": r"C:\\Program Files\\ImageMagick-7.1.1-Q16-HDRI\\magick.exe"})
     session_groq = Groq(api_key = "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")
     token_telegram = '7522802195:AAGZQptOGdKDAkiY79t_nX8lfBViOFSLdlI'
-    url = f"https://api.telegram.org/bot{token_telegram}"  
+    url = f"https://api.telegram.org/bot{token_telegram}"
 
     for video_id in list_video_ids:
 
@@ -346,22 +346,25 @@ if __name__ == "__main__":
 
         file_path = f"input//{video_id}.mp4"
         video_topic = video_id.split("_")[0]
-        video_personality = json_config['characters'][video_topic]
+        video_personality = json_config['channels'][video_topic]['character']
+        voice = random.choice(json_config['channels'][video_topic]['voice'])
 
-        if video_personality in ["billionaire"]: voice = Voice.MALE_SANTA_NARRATION
-        # else: voice = random.choice([Voice.US_FEMALE_1, Voice.US_FEMALE_2])
-        else: voice = Voice.US_FEMALE_2
+        if json_metadata[video_id]["description_manual"] == "": 
+            description = json_metadata[video_id]["description_extracted"]
+            video_explanation = generate_explanation(file_path, description)
+        else: video_explanation = json_metadata[video_id]["description_manual"]
 
-        video_explanation = generate_explanation(file_path, json_metadata[video_id])
-        # video_explanation = "A 25 yo woman makeup asrm tutorial getting ready for a date"
         video_title = generate_title(video_explanation, video_personality)
         video_description = generate_description(video_explanation)
         
-
-        video = add_intro_to_video(file_path, video_explanation, video_id, voice, video_personality, video_title, json_metadata[video_id])
+        video = add_intro_to_video(file_path, video_explanation, video_id, voice, video_personality, video_title)
         video = add_outro_to_video(video, video_id, voice)
 
-        video.write_videofile(f"output//{video_id}.mp4", codec = "libx264", logger = 'bar', threads=8)
+        shutil.rmtree(f"./output/{video_topic}")
+        os.mkdir(f"./output/{video_topic}")
+        video.write_videofile(f"output//{video_topic}//clip.mp4", codec = "libx264", logger = 'bar', threads=8)
+        with open(f"./output/{video_topic}/json_metadata.json", 'w') as file:
+            json.dump({'title': video_title,'description': video_description}, file, indent=2)
 
         # Getting chat ID
         for user in json_config["users"]:

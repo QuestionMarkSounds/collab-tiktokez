@@ -21,9 +21,12 @@ async def download_tiktoks(count, topic):
 
             if video_dict.get('video').get('duration') <= 20: continue
             if video_dict.get('video').get('duration') > 60: continue
-
-            json_metadata[f"{topic}_{counter+1}"] = video_dict.get('desc')
-
+        
+            json_metadata[f"{topic}_{counter+1}"] = {
+                "description_extracted": video_dict.get('desc'),
+                "description_manual": ""
+            }
+            
             pyk.save_tiktok(f"https://www.tiktok.com/@{video_dict.get('author').get('uniqueId')}/video/{video_dict.get('video').get('id')}?is_copy_url=1&is_from_webapp=v1",
 	        True,'video_data.csv','chrome')
 
